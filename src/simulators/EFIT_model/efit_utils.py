@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import RectBivariateSpline, interp2d
 from matplotlib import colors, cm
 from matplotlib.pyplot import Axes
-from src.simulators.KSTAR_setup import limiter_shape
+from src.utility.KSTAR_setup import limiter_shape
 from src.simulators.EFIT_model.flux_generator import FluxGenerator
 from src.simulators.EFIT_model.contour_regressor import ContourRegressor
 from matplotlib.gridspec import GridSpec

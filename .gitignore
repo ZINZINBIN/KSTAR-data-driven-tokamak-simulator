@@ -1,2 +1,11 @@
 # dataset
 dataset/*
+
+# weight
+weights/*
+
+# runs
+runs/*
+
+# results
+results/*

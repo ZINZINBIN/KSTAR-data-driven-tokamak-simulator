@@ -85,3 +85,24 @@ def calc_dilation(kernel_size, dilation_sizes, nlevel, nrecept):
     last_dilation = int(np.ceil((nrecept - nlastlevel)/(2.*(kernel_size-1))))
     dilation_sizes = (dilation_sizes**np.arange(nlevel-1)).tolist() + [last_dilation]
     return dilation_sizes
+
+if __name__ == "__main__":
+    
+    input_channels = 32
+    L_in = 12
+    levels = 4
+    kernel_size = 2
+    dilation_size = 2
+    nrecept = 1024
+    channel_size = [128] * levels
+    nrecepttotal = calc_seq_length(kernel_size,dilation_size,levels)
+    nlastlevel = calc_seq_length(kernel_size,dilation_size,levels-1)
+    last_dilation = int(np.ceil((nrecept - nlastlevel)/(2.*(kernel_size-1))))
+    dilation_sizes = (dilation_size**np.arange(levels-1)).tolist() + [last_dilation]
+    
+    nrecept = calc_seq_length(kernel_size, dilation_sizes, levels)
+    
+    data = torch.zeros((1, input_channels, L_in))
+    tcn = TCN(input_channels, 64, channel_size, kernel_size, 0.1, dilation_size)
+    output = tcn(data)
+    print("output size: ", output.size())
