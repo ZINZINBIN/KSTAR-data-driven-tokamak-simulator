@@ -84,27 +84,30 @@ class KSTARDataset(Dataset):
             tftsrt = df_shot.time.iloc[idx_tftsrt]
             tend = df_shot.time.iloc[idx_tend]
             
+            if tend - tftsrt < 1.0:
+                continue
+            
             # indexing
             input_indices = []
             
             idx = 0
             idx_last = len(df_shot.index) - 1
             
-            if idx_last < self.traj_len * 2:
+            if idx_last < 200:
                 continue
 
             while(idx < idx_last):
                 row = df_shot.iloc[idx]
                 t = row['time']
                 
-                if t < tftsrt + self.traj_len * self.dt + 0.5:
+                if t < tftsrt + self.traj_len * self.dt + 0.1:
                     idx += 1
                     continue
                 
                 input_indx = df_shot.index.values[idx]
                 input_indices.append(input_indx)
                 
-                if t > tend - 3.0:
+                if t > tend:
                     break
                 else:
                     idx += 1
@@ -114,12 +117,12 @@ class KSTARDataset(Dataset):
     def __getitem__(self, idx:int):
         
         input_idx = self.input_indices[idx]
-        traj = self.data[self.state_col + self.control_col].loc[input_idx-self.traj_len:input_idx-1].values
-        state = self.data[self.state_col].loc[input_idx].values
-        control = self.data[self.control_col].loc[input_idx].values
+        traj = self.data.loc[input_idx-self.traj_len:input_idx-1, self.state_col + self.control_col].values
+        state = self.data.loc[input_idx, self.state_col].values
+        control = self.data.loc[input_idx, self.control_col].values
         
-        next_state = self.data[self.state_col].loc[input_idx+1].values
-        next_control = self.data[self.control_col].loc[input_idx+1].values
+        next_state = self.data.loc[input_idx+1, self.state_col].values
+        next_control = self.data.loc[input_idx+1, self.control_col].values
 
         traj = torch.from_numpy(traj).float()
         state = torch.from_numpy(state).float()
@@ -127,7 +130,7 @@ class KSTARDataset(Dataset):
         
         next_state = torch.from_numpy(next_state).float()
         next_control = torch.from_numpy(next_control).float()
-
+        
         return traj, state, control, next_state, next_control
                 
     def __len__(self):

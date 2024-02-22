@@ -38,7 +38,7 @@ def preparing_0D_dataset(
         df[col] = df[col].astype(np.float32)
     
     # shot sampling
-    shot_list = np.unique(df.shot.values)[0:1024]
+    shot_list = np.unique(df.shot.values)
     print("# of shot : {}".format(len(shot_list)))
     
     # train / valid / test data split
