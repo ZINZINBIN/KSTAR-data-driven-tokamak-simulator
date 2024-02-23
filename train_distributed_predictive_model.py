@@ -7,6 +7,7 @@ from src.simulators.predictive_model.FNO import FNO
 from src.simulators.predictive_model.train_distributed import train
 from src.simulators.predictive_model.loss import CustomLoss
 from torch.utils.data import DataLoader
+import torch.distributed as dist
 
 warnings.filterwarnings(action = 'ignore')
 
@@ -57,7 +58,15 @@ def parsing():
 
     return args
 
+# torch cuda initialize and clear cache
+torch.cuda.init()
+torch.cuda.empty_cache()
+
 if __name__ == "__main__":
+    
+    # initialize process group
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "29500"
     
     # torch device state
     print("=============== Device setup ===============")
@@ -65,10 +74,6 @@ if __name__ == "__main__":
     print("torch current device : ", torch.cuda.current_device())
     print("torch device num : ", torch.cuda.device_count())
 
-    # torch cuda initialize and clear cache
-    torch.cuda.init()
-    torch.cuda.empty_cache()
-    
     args = parsing()
     
     # seed initialize
@@ -94,6 +99,7 @@ if __name__ == "__main__":
 
     # load dataset for training
     print("=============== Load dataset ===============")
+        
     df = pd.read_pickle("./dataset/KSTAR_tokamak_rl_control_data.pkl").reset_index()
     
     # columns for use
@@ -101,19 +107,20 @@ if __name__ == "__main__":
     control_col = config.feat_predicive['control']
     
     # load dataset
-    ts_train, ts_valid, ts_test, state_scaler, control_scaler = preparing_0D_dataset(df, state_col, control_col, args['scaler'], args['random_seed'])
+    ts_train, ts_valid, ts_test, state_scaler, control_scaler = preparing_0D_dataset(df, state_col, control_col, args['scaler'], args['random_seed'], False)
     
     traj_len = args['traj_len']
     batch_size = args['batch_size']
     
-    train_data = KSTARDataset(ts_train.copy(deep = True), traj_len, state_col, control_col, state_scaler, control_scaler, False, args['dt'])
-    valid_data = KSTARDataset(ts_valid.copy(deep = True), traj_len, state_col, control_col, state_scaler, control_scaler, False, args['dt'])
-    test_data = KSTARDataset(ts_test.copy(deep = True), traj_len, state_col, control_col, state_scaler, control_scaler, False, args['dt'])
+    train_data = KSTARDataset(ts_train.copy(deep = True), traj_len, state_col, control_col, state_scaler, control_scaler, False, args['dt'], True)
+    valid_data = KSTARDataset(ts_valid.copy(deep = True), traj_len, state_col, control_col, state_scaler, control_scaler, False, args['dt'], True)
+    test_data = KSTARDataset(ts_test.copy(deep = True), traj_len, state_col, control_col, state_scaler, control_scaler, False, args['dt'], True)
     
     # test during training process
     test_loader = DataLoader(test_data, batch_size = batch_size, num_workers = args['num_workers'], shuffle = True, pin_memory = True)
    
-    print("=============== Dataset information ===============")
+    # if dist.get_rank() == 0:
+    print("========== Dataset information ==========")
     print("train data : ", train_data.__len__())
     print("valid data : ", valid_data.__len__())
     print("test data : ", test_data.__len__())
@@ -129,6 +136,7 @@ if __name__ == "__main__":
         modes = 4,
         width = 64,
     )
+    
     model.summary()
 
     # Define weight directory

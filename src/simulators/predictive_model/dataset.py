@@ -18,6 +18,7 @@ class KSTARDataset(Dataset):
         control_scaler = None,
         multi_step : bool = False,
         dt:float = 0.01,
+        off_process_bar:bool = False,
         ):
         
         self.data = data
@@ -30,6 +31,8 @@ class KSTARDataset(Dataset):
         
         self.multi_step = multi_step
         self.dt = dt
+        
+        self.off_process_bar = off_process_bar
         
         # indice for getitem method
         self.input_indices = []
@@ -47,7 +50,7 @@ class KSTARDataset(Dataset):
     def preprocessing(self):
         # ignore shot which have too many nan values
         shot_ignore = []
-        for shot in tqdm(self.shot_list, desc = '# Extract null data'):
+        for shot in tqdm(self.shot_list, desc = '# Extract null data', disable=self.off_process_bar):
             df_shot = self.data[self.data.shot == shot]
             null_check = df_shot[self.state_col + self.control_col].isna().sum()
             
@@ -70,7 +73,7 @@ class KSTARDataset(Dataset):
     def _generate_index(self):
         
         # Index generation
-        for shot in tqdm(self.shot_list, desc = "# Dataset indice generation"):
+        for shot in tqdm(self.shot_list, desc = "# Dataset indice generation", disable=self.off_process_bar):
             
             df_shot = self.data[self.data.shot == shot]
             

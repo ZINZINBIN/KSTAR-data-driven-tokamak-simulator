@@ -28,7 +28,8 @@ def preparing_0D_dataset(
     state_col : List,
     control_col : List,
     scaler : Literal['Robust', 'Standard', 'MinMax'] = 'Robust',
-    random_seed : int = 42
+    random_seed : int = 42,
+    is_print:bool = True,
     ):
 
     total_col = state_col + control_col
@@ -39,7 +40,9 @@ def preparing_0D_dataset(
     
     # shot sampling
     shot_list = np.unique(df.shot.values)
-    print("# of shot : {}".format(len(shot_list)))
+    
+    if is_print:
+        print("# of shot : {}".format(len(shot_list)))
     
     # train / valid / test data split
     shot_train, shot_test = train_test_split(shot_list, test_size = 0.2, random_state = random_seed)
@@ -49,9 +52,10 @@ def preparing_0D_dataset(
     df_valid = df[df.shot.isin(shot_valid)]
     df_test = df[df.shot.isin(shot_test)]
     
-    print("# of train shot : {}".format(len(shot_train)))
-    print("# of valid shot : {}".format(len(shot_valid)))
-    print("# of test shot : {}".format(len(shot_test)))
+    if is_print:
+        print("# of train shot : {}".format(len(shot_train)))
+        print("# of valid shot : {}".format(len(shot_valid)))
+        print("# of test shot : {}".format(len(shot_test)))
     
     if scaler == 'Standard':
         state_scaler = StandardScaler()
@@ -64,10 +68,13 @@ def preparing_0D_dataset(
         control_scaler = MinMaxScaler()
   
     # scaler training
-    print("# Fitting scaler process..")
+    if is_print:
+        print("# Fitting scaler process..")
     state_scaler.fit(df_train[state_col].values)
     control_scaler.fit(df_train[control_col].values)
-    print("# Fitting scaler process complete")
+    
+    if is_print:
+        print("# Fitting scaler process complete")
         
     return df_train, df_valid, df_test, state_scaler, control_scaler
 

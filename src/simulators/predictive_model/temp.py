@@ -26,26 +26,51 @@ def get_distributed_loader(train_dataset : Dataset, valid_dataset : Dataset, num
     train_sampler = DistributedSampler(train_dataset, num_replicas=num_replicas, rank = rank, shuffle = True)
     valid_sampler = DistributedSampler(valid_dataset, num_replicas=num_replicas, rank = rank, shuffle = True)
 
-    train_loader = DataLoader(train_dataset, batch_size, sampler = train_sampler, num_workers = num_workers, pin_memory=True, drop_last = True, persistent_workers=True)
-    valid_loader = DataLoader(valid_dataset, batch_size, sampler = valid_sampler, num_workers = num_workers, pin_memory=True, drop_last = True, persistent_workers=True)
+    train_loader = DataLoader(train_dataset, batch_size, sampler = train_sampler, num_workers = num_workers, pin_memory=True, drop_last = True)
+    valid_loader = DataLoader(valid_dataset, batch_size, sampler = valid_sampler, num_workers = num_workers, pin_memory=True, drop_last = True)
 
-    return train_loader, valid_loader, train_sampler, valid_sampler
+    return train_loader, valid_loader
 
 def train_per_epoch(
-    ddp_model,
-    train_loader,
-    valid_loader,
-    optimizer,
-    scheduler,
+    rank : int, 
+    world_size : int, 
+    batch_size : Optional[int],
+    model : FNO,
+    train_dataset : Dataset,
+    valid_dataset : Dataset,
     loss_fn : torch.nn.Module,
     max_norm_grad : Optional[float] = None,
-    device:Optional[str] = "cpu"
+    model_filepath : str = "./weights/distributed.pt",
+    random_seed : int = 42,
+    resume : bool = True,
+    learning_rate : float = 1e-3
     ):
     
-    # training process
-    train_loss = 0
-    ddp_model.train()
+    device = torch.device("cuda:{}".format(rank))
+    set_random_seeds(random_seed)
+
+    model.train()
+    model.to(device)
+    ddp_model = DDP(model, device_ids = [device], output_device=device)
+
+    optimizer = torch.optim.RMSprop(ddp_model.parameters(), lr = learning_rate)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0 = 8, T_mult = 2)
     
+    if not os.path.isfile(model_filepath) and dist.get_rank() == 0:
+        torch.save(model.state_dict(), model_filepath)
+        
+    dist.barrier()
+    
+    # continue learning
+    if resume == True:
+        map_location = {"cuda:0":"cuda:{}".format(rank)}
+        ddp_model.load_state_dict(torch.load(model_filepath, map_location=map_location), strict = False)
+        
+    train_loader, valid_loader = get_distributed_loader(train_dataset, valid_dataset, num_replicas=world_size, rank = rank, num_workers = 4, batch_size = batch_size)
+
+    train_loss = 0
+
+    # training process
     for batch_idx, (traj, state, control, next_state, next_control) in enumerate(train_loader):
         
         if traj.size()[0] <= 1:
@@ -74,7 +99,7 @@ def train_per_epoch(
     train_loss /= (batch_idx + 1)
     
     # validation process
-    ddp_model.eval()
+    model.eval()
     valid_loss = 0
     
     for batch_idx, (traj, state, control, next_state, next_control) in enumerate(valid_loader):
@@ -111,6 +136,8 @@ def train_per_proc(
     test_for_check_per_epoch : Optional[DataLoader] = None,
     ):
     
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "29500"
     dist.init_process_group("nccl", rank = rank, world_size = world_size)
 
     train_loss_list = []
@@ -124,45 +151,22 @@ def train_per_proc(
         writer = SummaryWriter(tensorboard_dir)
     else:
         writer = None
-        
-    device = torch.device("cuda:{}".format(rank))
-    set_random_seeds(random_seed)
-
-    torch.cuda.set_device(device)
-    model.to(device)
-    model.train()
     
-    ddp_model = DDP(model, device_ids = [device], output_device=device)
-    optimizer = torch.optim.RMSprop(ddp_model.parameters(), lr = learning_rate)
-    
-    # scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0 = 8, T_mult = 2)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size = 8, gamma=0.995)
-    
-    if not os.path.isfile(model_filepath) and dist.get_rank() == 0:
-        torch.save(model.state_dict(), model_filepath)
-        
-    dist.barrier()
-    # continue learning
-    if resume == True:
-        map_location = {"cuda:0":"cuda:{}".format(rank)}
-        ddp_model.load_state_dict(torch.load(model_filepath, map_location=map_location), strict = False)
-        
-    train_loader, valid_loader, train_sampler, valid_sampler = get_distributed_loader(train_dataset, valid_dataset, num_replicas=world_size, rank = rank, num_workers = 8, batch_size = batch_size)
-
-    for epoch in tqdm(range(num_epoch), desc = "Distributed training process", disable = False if rank == 0 else True):
-        
-        train_sampler.set_epoch(epoch)
-        valid_sampler.set_epoch(epoch)
-        
+    print("# rank : {} training process proceeding...".format(rank))
+    for epoch in range(num_epoch):
         train_loss, valid_loss = train_per_epoch(
-            ddp_model,
-            train_loader,
-            valid_loader,
-            optimizer,
-            scheduler,
+            rank,
+            world_size,
+            batch_size,
+            model,
+            train_dataset,
+            valid_dataset,
             loss_fn,
             max_norm_grad,
-            device
+            model_filepath,
+            random_seed,
+            resume,
+            learning_rate
         )
         
         dist.barrier()
@@ -210,8 +214,6 @@ def train_per_proc(
 
             # save the last parameters
             torch.save(model.state_dict(), model_filepath)
-            
-        dist.barrier()
     
     if dist.get_rank() == 0:
         print("# training process finished, best loss : {:.3f}, best epoch : {}".format(best_loss, best_epoch))
@@ -241,8 +243,8 @@ def train(
     tensorboard_dir : Optional[str] = None,
     test_for_check_per_epoch : Optional[DataLoader] = None,
 ):
-
-    world_size = torch.cuda.device_count()
+    
+    world_size = dist.get_world_size()
 
     mp.spawn(
         train_per_proc,

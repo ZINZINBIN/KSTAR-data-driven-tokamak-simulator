@@ -29,7 +29,7 @@ def parsing():
     parser.add_argument("--lr", type = float, default = 1e-3)
     parser.add_argument("--num_epoch", type = int, default = 32)
     parser.add_argument("--pin_memory", type = bool, default = True)
-    parser.add_argument("--num_workers", type = int, default = 4)
+    parser.add_argument("--num_workers", type = int, default = 8)
     parser.add_argument("--verbose", type = int, default = 4)
     parser.add_argument("--max_norm_grad", type = float, default = 1.0)
     parser.add_argument("--multi_step_validation", type = bool, default = False)
@@ -125,9 +125,9 @@ if __name__ == "__main__":
     print("valid data : ", valid_data.__len__())
     print("test data : ", test_data.__len__())
 
-    train_loader = DataLoader(train_data, batch_size = batch_size, num_workers = args['num_workers'], shuffle = True, pin_memory = True)
-    valid_loader = DataLoader(valid_data, batch_size = batch_size, num_workers = args['num_workers'], shuffle = True, pin_memory = True)
-    test_loader = DataLoader(test_data, batch_size = batch_size, num_workers = args['num_workers'], shuffle = True, pin_memory = True)
+    train_loader = DataLoader(train_data, batch_size = batch_size, num_workers = args['num_workers'], shuffle = True, pin_memory = True, persistent_workers=True, drop_last=True)
+    valid_loader = DataLoader(valid_data, batch_size = batch_size, num_workers = args['num_workers'], shuffle = True, pin_memory = True, persistent_workers=True, drop_last=True)
+    test_loader = DataLoader(test_data, batch_size = batch_size, num_workers = args['num_workers'], shuffle = True, pin_memory = True, persistent_workers=True, drop_last=True)
     
     # data range
     ts_data = pd.concat([train_data.data, valid_data.data, test_data.data], axis = 1)
@@ -146,7 +146,7 @@ if __name__ == "__main__":
     model.summary()
     model.to(device)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr = args['lr'])
+    optimizer = torch.optim.RMSprop(model.parameters(), lr = args['lr'])
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size = args['step_size'], gamma=args['gamma'])
 
     # Define weight directory

@@ -9,6 +9,6 @@ class CustomLoss(nn.Module):
         self.mse_loss = nn.MSELoss(reduction = 'none')
     
     def forward(self, pred : torch.Tensor, target : torch.Tensor):
-        loss = torch.sqrt(self.mse_loss(pred, target).mean(dim = 0)) / target.abs().mean(dim = 0)
-        loss = loss.view(-1,).sum()
+        loss = torch.sqrt(self.mse_loss(pred, target)) / (target.abs() + 1e-3)
+        loss = loss.view(-1,).mean()
         return loss
