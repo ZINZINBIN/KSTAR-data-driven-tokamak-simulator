@@ -1,4 +1,4 @@
-import torch, os, argparse, warnings
+import torch, os, argparse, warnings, random
 import pandas as pd
 from src.configuration.sim_config import SimConfig
 from src.utility.preprocessing import seed_everything, preparing_0D_dataset, get_range_of_output
@@ -66,7 +66,7 @@ if __name__ == "__main__":
     
     # initialize process group
     os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "29500"
+    os.environ["MASTER_PORT"] = "{:05d}".format(random.randint(10000,65535))
     
     # torch device state
     print("=============== Device setup ===============")
